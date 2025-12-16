@@ -16,7 +16,7 @@ resource "aws_vpc" "deployHub_vpc" {
 # --------------------
 resource "aws_subnet" "public_subnet" {
   vpc_id                  = aws_vpc.deployHub_vpc.id
-  cidr_block              = var.public_subnet_cide_block
+  cidr_block              = var.public_subnet_cidr_block
   availability_zone       = var.public_subnet_availability_zone
   map_public_ip_on_launch = true
 
@@ -62,7 +62,7 @@ resource "aws_route_table_association" "public_association" {
 # --------------------
 resource "aws_subnet" "private_subnet" {
   vpc_id                  = aws_vpc.deployHub_vpc.id
-  cidr_block              = var.private_subnet_cide_block
+  cidr_block              = var.private_subnet_cidr_block
   availability_zone       = var.private_subnet_availability_zone
   map_public_ip_on_launch = false
 
@@ -164,7 +164,7 @@ resource "aws_iam_role_policy_attachment" "eks_vpc_controller" {
 
 resource "aws_eks_cluster" "deployHub_cluster" {
   name     = "eks-cluster"
-  version  = "1.30"
+  version  = "1.29"
   role_arn = aws_iam_role.eks_role.arn
   vpc_config {
     subnet_ids = [
