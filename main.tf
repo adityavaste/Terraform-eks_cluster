@@ -169,5 +169,5 @@ resource "aws_eks_node_group" "nodes" {
   }
 
   instance_types = ["t2.micro"]
-  ami_type       = "ami-00ca570c1b6d79f36"
+  ami_type       = var.ami_type
 }
