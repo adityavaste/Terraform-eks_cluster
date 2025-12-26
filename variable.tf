@@ -30,3 +30,8 @@ variable "aws_instance_type" {
 variable "aws_instance_key_pair" {
   type = string
 }
+
+variable "ami_type" {
+  description = "The AMI type for the EKS nodes"
+  type        = string
+}
