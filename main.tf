@@ -1,176 +1,173 @@
+
 # --------------------
 # VPC
 # --------------------
-resource "aws_vpc" "deployHub_vpc" {
-  cidr_block           = var.deployHub_vpc_cidr_block
+resource "aws_vpc" "eks_vpc" {
+  cidr_block           = "10.0.0.0/16"
   enable_dns_support   = true
   enable_dns_hostnames = true
 
-  tags = {
-    Name = "deployHub-vpc"
-  }
+  tags = { Name = "eks-vpc" }
 }
 
 # --------------------
-# Public Subnet
+# Subnets
 # --------------------
 resource "aws_subnet" "public_subnet" {
-  vpc_id                  = aws_vpc.deployHub_vpc.id
-  cidr_block              = var.public_subnet_cidr_block
-  availability_zone       = var.public_subnet_availability_zone
+  vpc_id                  = aws_vpc.eks_vpc.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "ap-south-1a"
   map_public_ip_on_launch = true
 
-  tags = {
-    Name = "public-subnet"
-  }
+  tags = { Name = "public-subnet" }
+}
+
+resource "aws_subnet" "private_subnet" {
+  vpc_id            = aws_vpc.eks_vpc.id
+  cidr_block        = "10.0.2.0/24"
+  availability_zone = "ap-south-1a"
+
+  tags = { Name = "private-subnet" }
 }
 
 # --------------------
 # Internet Gateway
 # --------------------
-resource "aws_internet_gateway" "igw_deployhHub" {
-  vpc_id = aws_vpc.deployHub_vpc.id
-
-  tags = {
-    Name = "deployHub-IGW"
-  }
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.eks_vpc.id
 }
 
 # --------------------
-# Public Route Table
-# --------------------
-resource "aws_route_table" "public_route_table" {
-  vpc_id = aws_vpc.deployHub_vpc.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.igw_deployhHub.id
-  }
-
-  tags = {
-    Name = "public-route-table"
-  }
-}
-
-resource "aws_route_table_association" "public_association" {
-  route_table_id = aws_route_table.public_route_table.id
-  subnet_id      = aws_subnet.public_subnet.id
-}
-
-# --------------------
-# Private Subnet
-# --------------------
-resource "aws_subnet" "private_subnet" {
-  vpc_id                  = aws_vpc.deployHub_vpc.id
-  cidr_block              = var.private_subnet_cidr_block
-  availability_zone       = var.private_subnet_availability_zone
-  map_public_ip_on_launch = false
-
-  tags = {
-    Name = "private-subnet"
-  }
-}
-
-# --------------------
-# NAT Gateway Requirements (Elastic IP)
+# NAT Gateway
 # --------------------
 resource "aws_eip" "nat_eip" {
   domain = "vpc"
-
-  tags = {
-    Name = "nat-eip"
-  }
 }
 
 resource "aws_nat_gateway" "nat" {
   allocation_id = aws_eip.nat_eip.id
   subnet_id     = aws_subnet.public_subnet.id
-
-  depends_on = [aws_internet_gateway.igw_deployhHub]
-
-  tags = {
-    Name = "deployHub-nat-gateway"
-  }
 }
 
 # --------------------
-# Private Route Table → Internet via NAT
+# Route Tables
 # --------------------
-resource "aws_route_table" "private_route" {
-  vpc_id = aws_vpc.deployHub_vpc.id
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.eks_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+}
+
+resource "aws_route_table_association" "public_assoc" {
+  subnet_id      = aws_subnet.public_subnet.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+resource "aws_route_table" "private_rt" {
+  vpc_id = aws_vpc.eks_vpc.id
 
   route {
     cidr_block     = "0.0.0.0/0"
     nat_gateway_id = aws_nat_gateway.nat.id
   }
-
-  tags = {
-    Name = "private-route-table"
-  }
 }
 
-resource "aws_route_table_association" "private_association" {
-  route_table_id = aws_route_table.private_route.id
+resource "aws_route_table_association" "private_assoc" {
   subnet_id      = aws_subnet.private_subnet.id
+  route_table_id = aws_route_table.private_rt.id
 }
 
 # --------------------
-# EC2 (in Public Subnet)
+# IAM ROLE - EKS CLUSTER
 # --------------------
-resource "aws_instance" "xyz" {
-  ami           = var.aws_instance_ami
-  instance_type = var.aws_instance_type
-  key_name      = var.aws_instance_key_pair
-
-  subnet_id = aws_subnet.public_subnet.id # ⬅ FIXED
-
-  tags = {
-    Name = "deployHub-instance"
-  }
-}
-
-# --------------------
-# Iam role 
-# --------------------
-resource "aws_iam_role" "eks_role" {
-  name = "deployhub-eks-role"
+resource "aws_iam_role" "eks_cluster_role" {
+  name = "eks-cluster-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
-      Action = "sts:AssumeRole",
-      Effect = "Allow",
-      Principal = {
-        Service = "eks.amazonaws.com"
-      }
+      Effect    = "Allow"
+      Principal = { Service = "eks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
     }]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
-  role       = aws_iam_role.eks_role.name
+resource "aws_iam_role_policy_attachment" "cluster_policy" {
+  role       = aws_iam_role.eks_cluster_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
 }
 
-resource "aws_iam_role_policy_attachment" "eks_vpc_controller" {
-  role       = aws_iam_role.eks_role.name
+resource "aws_iam_role_policy_attachment" "vpc_policy" {
+  role       = aws_iam_role.eks_cluster_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
 }
 
-
 # --------------------
-# eks cluster
+# EKS CLUSTER (MANAGED MASTER)
 # --------------------
-
-resource "aws_eks_cluster" "deployHub_cluster" {
-  name     = "eks-cluster"
+resource "aws_eks_cluster" "eks" {
+  name     = "deployhub-cluster"
   version  = "1.29"
-  role_arn = aws_iam_role.eks_role.arn
+  role_arn = aws_iam_role.eks_cluster_role.arn
+
   vpc_config {
     subnet_ids = [
-      aws_subnet.private_subnet.id,
-      aws_subnet.public_subnet.id
+      aws_subnet.public_subnet.id,
+      aws_subnet.private_subnet.id
     ]
   }
 }
 
+# --------------------
+# IAM ROLE - WORKER NODES
+# --------------------
+resource "aws_iam_role" "eks_node_role" {
+  name = "eks-node-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "worker_policy" {
+  role       = aws_iam_role.eks_node_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+}
+
+resource "aws_iam_role_policy_attachment" "cni_policy" {
+  role       = aws_iam_role.eks_node_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSCNIPolicy"
+}
+
+resource "aws_iam_role_policy_attachment" "ecr_policy" {
+  role       = aws_iam_role.eks_node_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+# --------------------
+# MANAGED NODE GROUP
+# --------------------
+resource "aws_eks_node_group" "nodes" {
+  cluster_name    = aws_eks_cluster.eks.name
+  node_group_name = "deployhub-nodes"
+  node_role_arn   = aws_iam_role.eks_node_role.arn
+  subnet_ids      = [aws_subnet.private_subnet.id]
+
+  scaling_config {
+    desired_size = 1
+    min_size     = 1
+    max_size     = 3
+  }
+
+  instance_types = ["t2.micro"]
+  ami_type       = "ami-00ca570c1b6d79f36"
+}
