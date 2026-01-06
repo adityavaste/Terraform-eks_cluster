@@ -1,2 +1,1 @@
-# eks_module
-# eks_module
+Provisioned a managed Kubernetes (EKS) cluster with managed node groups.
