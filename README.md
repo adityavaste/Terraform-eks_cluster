@@ -19,3 +19,4 @@ module "eks-cluster" {
 
 This whiteboard illustrates the exact architecture of the setup.
 (https://excalidraw.com/#json=m0T9tTtpGXsx3FVNeRlwu,cBnYGDdWLa2UTkVBHWL2-A)
+for better view adjust zoom at 40%
