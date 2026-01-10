@@ -15,3 +15,7 @@ module "eks-cluster" {
   aws_instance_key_pair            = "12-dec"
   ami_type                         = "AL2_x86_64"
 }
+
+
+This whiteboard illustrates the exact architecture of the setup.
+(https://excalidraw.com/#json=m0T9tTtpGXsx3FVNeRlwu,cBnYGDdWLa2UTkVBHWL2-A)
